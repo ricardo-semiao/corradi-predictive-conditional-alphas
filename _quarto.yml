@@ -1,0 +1,43 @@
+project:
+  type: book
+  output-dir: docs
+
+book:
+  title: Empirical Analysis for "Predictive conditional alphas" (Ditaso el. al 2026)
+  author:
+    - name: |
+        Paper authors: Valentina Corradi, Walter Distaso, \
+        Marcelo Fernandes, and Asger Lunde \ \
+        Research assistant: Ricardo Semião e Castro
+      email: ricardo.semiao@outlook.com
+      url: ricardo-semiao.github.io
+  date: today
+  date-format: "D MMM YYYY"
+  output-file: ditaso2026_empirical_analysis
+  chapters:
+    - index.md # Copy of README.md, created and deleted by src/quarto_render.ps1
+    - src/data_factors.ipynb
+    - src/data_stocks.ipynb
+    - src/pca.ipynb
+    - src/betas.ipynb
+    - src/alphas.ipynb
+
+bibliography: bibliography/references.bib
+
+execute:
+  eval: false
+  warning: false
+  error: false
+
+format:
+  pdf:
+    documentclass: scrreprt
+    keep-tex: true
+    toc: true
+    toc-depth: 3
+    include-in-header:  
+      text: |
+        \usepackage[a4paper, left=2cm, right=2cm, top=2.5cm, bottom=2.5cm]{geometry}
+        \numberwithin{equation}{section}
+        \numberwithin{table}{section}
+        \numberwithin{figure}{section}
