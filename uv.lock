@@ -906,7 +906,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ra-ditaso2026"
+name = "ra-distaso2026"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
@@ -923,6 +923,11 @@ dependencies = [
     { name = "typing" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "debugpy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.4" },
@@ -937,6 +942,9 @@ requires-dist = [
     { name = "requests", specifier = ">=2.34.2" },
     { name = "typing", specifier = ">=3.10.0.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "debugpy", specifier = ">=1.8.21" }]
 
 [[package]]
 name = "requests"

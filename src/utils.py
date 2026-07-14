@@ -8,11 +8,17 @@ if os.getcwd() not in sys.path: sys.path.insert(0, os.getcwd())
 
 import re
 import random
+
+import polars as pl
 import numpy as np
+
+import plotnine as gg
+from plotnine import ggplot, aes
 
 from numpy.typing import NDArray
 
 from src.parameters import PARAMETERS as PARS
+from src.parameters import _counts, _trading_days
 
 
 
@@ -29,86 +35,181 @@ def format_days_byyear(days: NDArray[np.datetime64], fmt: str = "%m-%d") -> str:
             )
     return days_fmt
 
+def fill_missing_days(data: pl.DataFrame) -> pl.DataFrame:
+    stock_lifetimes = (
+        data
+        .group_by("permno")
+        .agg([
+            pl.col("d").min().alias("first_obs"),
+            pl.col("d").max().alias("last_obs")
+        ])
+    )
 
-def obs_per_stock_day(
-    n: int | None = None
-) -> NDArray[np.int_]: # shape: (n, len(days))
-    key_errors = {"out_bounds": set(), "in_bounds": set()}
-    folder = "data/stocks_1min_returns"
-    paths = {
-        path[4:9]: os.path.join(folder, path)
-        for path in os.listdir(folder)
-        if re.match(r"perm[0-9]{5}.csv", path)
+    data_filled = (
+        # Grid of all permnos X trading days:
+        data.select(pl.col("permno").unique())
+        .join(pl.DataFrame({"d": PARS.trading_days_final.astype("int64")}), how = "cross")
+        # Remove rows outside the permno lifetime:
+        .join(stock_lifetimes, on = "permno", how = "left")
+        .filter(
+            (pl.col("d") >= pl.col("first_obs"))
+            & (pl.col("d") <= pl.col("last_obs"))
+        )
+        # Add obs_count data, filling missing days with 0:
+        .join(data, on = ["permno", "d"], how = "left")
+        .with_columns(pl.col("obs_count").fill_null(0))
+        .select(["permno", "d", "obs_count"])
+        .sort(["permno", "d"])
+    )
+
+    return data_filled
+
+
+
+# Graphs -----------------------------------------------------------------------
+
+def plot_day_fullness_river(data: pl.DataFrame, n: int | str = "") -> gg.ggplot:
+    g_fill_colors = {
+        "10% - 90%": "#ffb399",
+        "20% - 80%": "#ff6699",
+        "30% - 70%": "#ff0000",
+        "40% - 60%": "#ffffff",
+        "median": "black",
+        "non-full factors": "blue",
+        "non-full others": "gray"
     }
 
-    n = len(paths) if n is None else min(n, len(paths))
-    paths = dict(random.sample(list(paths.items()), k = n))
-    if not paths:
-        raise Exception(f"No matching files found in folder {folder}")
-    
-    days = tuple(str(d) for d in PARS.trading_days)
-    stocks_day_obs = np.zeros((len(paths), len(days)), dtype = float)
-    day_obs_base = {day: 0 for day in days}
+    data_factor = (
+        pl.DataFrame({"d": _trading_days, "n": _counts})
+        .filter(pl.col("n") != (PARS.blocks_1min + 1)) # Factor data +1 minute
+        .with_columns(pl.col("n") / (PARS.blocks_1min + 1))
+    )
+    days_low_obs = (
+        data
+        .with_columns(median_rw = pl.col("median").rolling_mean(5))
+        .filter(pl.col("median") - pl.col("median_rw") <= - 0.1)
+    )
 
-    for idx, path in enumerate(paths.values()):
-        if idx % 100 == 0:
-            print(f"Processing file {idx + 1}/{len(paths)}: {path}")
-        day_obs = day_obs_base.copy()
-        # Assumes 1 line per minute. If not, create a set for the minutes, then
-        # format them it days before passing to Counter
-        range = ["", ""]
-
-        with open(path, "rb") as f: # Binary for speed
-            f.readline() # Skip header
-            line = f.readline()
-            # First characters are the datetime in YYYY-MM-DD hh:mm:ss format
-            day = line[:10].decode("ascii")
-            range[0] = day
-            while line:
-                day = line[:10].decode("ascii")
-                try:
-                    day_obs[day] += 1
-                except KeyError:
-                    if day < days[0] or day > days[-1]:
-                        key_errors["out_bounds"].add(day)
-                    else:
-                        key_errors["in_bounds"].add(day)
-
-                line = f.readline()
-            else:
-                range[1] = day
-
-        day_arr = (
-            np.array(list(day_obs.values()), dtype = float)
-            / PARS.blocks_1min
+    g = (
+        ggplot(data, aes("d", group = 1)) +
+        gg.geom_ribbon(aes(ymin = "q1", ymax = "q9", fill = "'10% - 90%'")) +
+        gg.geom_ribbon(aes(ymin = "q2", ymax = "q8", fill = "'20% - 80%'")) +
+        gg.geom_ribbon(aes(ymin = "q3", ymax = "q7", fill = "'30% - 70%'")) +
+        gg.geom_ribbon(aes(ymin = "q4", ymax = "q6", fill = "'40% - 60%'")) +
+        gg.geom_line(aes(y = "median", color = "'median'"), size = 0.25) +
+        gg.geom_point(aes("d", "n", color = "'non-full factors'"), data_factor, size = 1.5) +
+        gg.geom_point(aes("d", "median", color = "'non-full others'"), days_low_obs, size = 1.5) +
+        gg.scale_x_date(date_labels = "%Y", date_breaks = "1 year") +
+        gg.scale_fill_manual(values = g_fill_colors) +
+        gg.scale_color_manual(values = g_fill_colors) +
+        gg.scale_y_continuous(labels = lambda bs: ["{:.0%}".format(b) for b in bs]) +
+        gg.labs(
+            title = "Proportion of minutes with data within each day",
+            subtitle = (
+                f"Quantiles calculated each day across all {n}"
+                " stocks"
+            ),
+            caption = "Non-full others: median $0.1$ points below its 5-day rolling average.",
+            y = "Proportion of minutes with data", x = "Day",
+            fill = "Quantiles", color = " "
+        ) +
+        gg.theme_bw() +
+        gg.theme(
+            axis_text_x = gg.element_text(rotation = 45, hjust = 1),
+            figure_size = (6.5, 5),
+            legend_position = "bottom",
+            legend_box = "vertical"
         )
-        day_arr[:np.searchsorted(days, range[0], side = "left")] = np.nan
-        day_arr[np.searchsorted(days, range[1], side = "right"):] = np.nan
+    )
 
-        stocks_day_obs[idx, :] = day_arr
+    return g
 
-    if key_errors["in_bounds"]:
-        raise KeyError(
-            f"\nWarning: {len(key_errors['in_bounds'])} in-bounds days not " +
-            "found in trading days list. They were:" +
-            format_days_byyear(
-                np.array(list(key_errors["in_bounds"]), dtype = "datetime64[D]")
-            )
+
+def plot_day_fullness_box(
+    data: pl.DataFrame, min: int = 1, n: int | str = ""
+) -> gg.ggplot:
+    def mean_perc_low_obs(x: int) -> pl.Series:
+        res = (
+            data
+            .group_by("permno")
+            .agg(((pl.col("obs_count") >= x) / pl.len()).sum())
+            ["obs_count"]
         )
+        return res
 
+    if min == 1:
+        k = (PARS.blocks_5min // 2) # 36
+        divs = range(PARS.blocks_1min // k)
+    elif min == 5:
+        k = 6
+        divs = range(PARS.blocks_5min // k)
+    else:
+        raise ValueError("min must be 1 or 5")
 
-    if key_errors["out_bounds"]:
-        raise KeyError(
-            f"Error: {len(key_errors['out_bounds'])} out-of-bounds days not "
-            "found in trading days list. They were:"
-            "\n- ".join(sorted(set(key_errors["out_bounds"])))
+    gdata = (
+        pl.DataFrame({
+            f"below_{(i + 1) * k}": mean_perc_low_obs((i + 1) * k)
+            for i in divs
+        })
+        .unpivot(on = None, variable_name = "n_obs", value_name = "perc_low_obs")
+        .with_columns(
+            pl.col("n_obs").str.replace_all("below_", "")
+            .cast(pl.Enum(str((i + 1) * k) for i in divs))
         )
+    )
 
-    return stocks_day_obs
+    g = (
+        gg.ggplot(gdata, gg.aes("n_obs", "perc_low_obs")) +
+        gg.geom_boxplot() +
+        gg.geom_hline(yintercept = 0.975, linetype = "dashed", color = "red") +
+        gg.scale_y_continuous(labels = lambda bs: ["{:.0%}".format(b) for b in bs]) +
+        gg.labs(
+            title = "Distribution of days' observation count ($n$)",
+            subtitle = f"Across all {n} stocks",
+            caption = "Red line: $97.5\\%$.",
+            y = "Fraction of days with $n \\geq \\tau$",
+            x = "$\\tau$"
+        ) +
+        gg.theme_bw()
+    )
+
+    return g
+
+def plot_day_fullness_hist(data: pl.DataFrame) -> gg.ggplot:
+    g = (
+        ggplot(data, aes("obs_count", gg.after_stat("density"))) +
+        gg.geom_histogram(bins = 40) +
+        gg.labs(
+            title = "Distribution of days' observation count ($n$)",
+            subtitle = f"Across all {data.shape[0]:,} stocks-day pairs",
+            x = "$n$", y = "Density"
+        ) +
+        gg.theme_bw()
+    )
+
+    return g
 
 
 
 # Debugging --------------------------------------------------------------------
 
 if __name__ == "__main__":
-    obs = obs_per_stock_day(2)
+    data_days = pl.read_csv(
+        "data/day_counts.csv"
+    ).with_columns(
+        pl.from_epoch(pl.col("d"), time_unit = "d")
+    )
+
+    data_days_fill = (
+        data_days.with_columns(pl.col("obs_count") / PARS.blocks_1min)
+        .group_by("d")
+        .agg(
+            median = pl.median("obs_count").alias("median"),
+            *[
+                pl.quantile("obs_count", q / 10).alias(f"q{q}")
+                for q in [4, 6, 3, 7, 2, 8, 1, 9]
+            ]
+        )
+    )
+
+    plot_day_fullness(data_days_fill)
