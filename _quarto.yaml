@@ -3,7 +3,7 @@ project:
     output-dir: docs
 
 book:
-    title: Empirical Analysis for "Predictive conditional alphas" (Ditaso el. al 2026)
+    title: Empirical Analysis for "Predictive conditional alphas" (Distaso el. al 2026)
     author:
         -   name: |
                 Paper authors: Valentina Corradi, Walter Distaso, \
@@ -31,7 +31,7 @@ execute:
 
 format:
     pdf:
-        title-meta: Ditaso 2026 Empirical Analysis
+        title-meta: Distaso 2026 Empirical Analysis
         author-meta: Ricardo Semião e Castro
         documentclass: scrreprt #report or scrreprt
         classoption: [headings=small, titlepage=false]

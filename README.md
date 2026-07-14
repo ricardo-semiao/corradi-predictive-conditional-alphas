@@ -1,6 +1,6 @@
-# Empirical Analysis for "Predictive conditional alphas" (Ditaso el. al 2026) {#sec-intro}
+# Empirical Analysis for "Predictive conditional alphas" (distaso el. al 2026) {#sec-intro}
 
-This project contains the empirical analysis for the paper "Predictive conditional alphas" by Ditaso et al. (2026). The relevant version of the paper can be found [bibliography/Ditaso2026_JASA.pdf](bibliography/Ditaso2026_JASA.pdf).
+This project contains the empirical analysis for the paper "Predictive conditional alphas" by distaso et al. (2026). The relevant version of the paper can be found [bibliography/distaso2026_JASA.pdf](bibliography/distaso2026_JASA.pdf).
 
 The general steps of the empirical analysis are:
 

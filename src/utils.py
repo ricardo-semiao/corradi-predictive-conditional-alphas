@@ -190,6 +190,50 @@ def plot_day_fullness_hist(data: pl.DataFrame) -> gg.ggplot:
     return g
 
 
+def plot_prices_returns(
+    data_prices: pl.DataFrame, data_returns: pl.DataFrame
+) -> gg.ggplot:
+    datas = {
+        key: (
+            df
+            .group_by(["permno", pl.col("ts_min_ny") // (60 * 24 * 30)])
+            .agg(pl.col(key).last() if key == "price" else pl.col(key).sum())
+            .with_columns(
+                pl.from_epoch(pl.col("ts_min_ny") * 30, time_unit = "d"),
+                variable = pl.lit(key.replace("_", " ")).cast(pl.Enum(["price", "log return"]))
+            )
+        )
+        for key, df in {"price": data_prices, "log_return": data_returns}.items()
+    }
+
+    g = (
+        ggplot(mapping = aes(x = "ts_min_ny")) +
+        gg.geom_line(aes(y = "price"), datas["price"]) +
+        gg.geom_segment(
+            aes(
+                x = "ts_min_ny", xend = "ts_min_ny", y = 0, yend = "log_return",
+                color = "log_return > 0"
+            ),
+            datas["log_return"]
+        ) +
+        gg.facet_grid("variable", "permno", scales = "free") +
+        gg.scale_x_datetime(date_labels = "%Y", date_breaks = "1 year") +
+        gg.scale_color_manual(values = ["red", "green"]) +
+        gg.labs(
+            title = "Price and log returns across time",
+            subtitle = f"Each column is a randomly selected PERMNOs",
+            y = "Value", x = "Time"
+        ) +
+        gg.theme_bw() +
+        gg.theme(
+            axis_text_x = gg.element_text(rotation = 45, hjust = 1),
+            legend_position = "none"
+        )
+    )
+
+    return g
+
+
 
 # Debugging --------------------------------------------------------------------
 
