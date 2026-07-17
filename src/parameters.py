@@ -27,7 +27,7 @@ _blocks_5min = ((_time_end - _time_start).astype("int") + 1) // 5 # 78
 
 # Factor data:
 _days_factor = np.loadtxt(
-    "data/ff6_1min_returns_raw.csv",
+    "data/factors_1min_returns_raw.csv",
     delimiter = ",", skiprows = 1, usecols = 0, dtype = "datetime64[D]"
 )
 

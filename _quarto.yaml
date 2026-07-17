@@ -21,11 +21,12 @@ book:
     - src/pca.ipynb
     - src/betas.ipynb
     - src/alphas.ipynb
+    - docs/references.md
 
 bibliography: bibliography/references.bib
 
 execute:
-    eval: false
+    eval: true
     warning: false
     error: false
 
@@ -38,6 +39,7 @@ format:
         keep-tex: true
         toc: true
         toc-depth: 2
+        number-depth: 3
         colorlinks: true
         citecolor: green
         linkcolor: orange

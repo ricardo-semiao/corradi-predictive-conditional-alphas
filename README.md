@@ -1,6 +1,6 @@
-# Empirical Analysis for "Predictive conditional alphas" (distaso el. al 2026) {#sec-intro}
+# Empirical Analysis for "Predictive conditional alphas" (Distaso el. al 2026) {#sec-intro}
 
-This project contains the empirical analysis for the paper "Predictive conditional alphas" by distaso et al. (2026). The relevant version of the paper can be found [bibliography/distaso2026_JASA.pdf](bibliography/distaso2026_JASA.pdf).
+This project contains the empirical analysis for the paper "Predictive conditional alphas" by Distaso et al. (2026). The relevant version of the paper can be found [bibliography/distaso2026_JASA.pdf](bibliography/distaso2026_JASA.pdf).
 
 The general steps of the empirical analysis are:
 
@@ -21,8 +21,9 @@ The project is run in python 3.14 and DuckDB. The [uv](https://docs.astral.sh/uv
 The repository is organized as follows:
 
 - [data](data): not committed due to size.
-    - [data/stocks_1min_returns](data/stocks_1min_returns) and [data/stocks_5min_returns](data/stocks_5min_returns): individual stock log-returns at the 1-minute and 5-minute frequencies. Stocks are ID'd by their CRSP PERMNO. The raw data [data/trades.db](data/trades.db) is not committed and is from the TAQ database.
-    - [data/ff6_1min_returns_raw.csv](data/ff6_1min_returns_raw.csv), [data/ff6_1min_returns.csv](data/ff6_1min_returns.csv) and [data/ff6_5min_returns.csv](data/ff6_5min_returns.csv): Factor returns at the 1-minute and 5-minute frequencies. The raw data is available at [www.sakethaleti.com/data](https://www.sakethaleti.com/data).
+    - [data/stocks_raw](data/stocks_raw) and [stocks_1min_returns.parquet](stocks_1min_returns.parquet): raw stocks from the TAQ database plus intermediate transformations, and the stocks log-returns at the 1-minute frequency.
+    - [data/factors_1min_returns_raw.csv](data/factors_1min_returns_raw.csv), [data/factors_1min_returns.csv](data/factors_1min_returns.csv) and [data/factors_5min_returns.csv](data/factors_5min_returns.csv): Factor returns at the 1-minute and 5-minute frequencies. The raw data is available at [www.sakethaleti.com/data](https://www.sakethaleti.com/data).
+    - [data/pca_1min.csv](data/pca_1min.csv) and [data/pca_5min.csv](data/pca_5min.csv): Principal components of the factors at the 1-minute and 5-minute frequencies.
 - [src](src): Most files here are sections of the report.
     - [src/data_factors.ipynb](src/data_factors.ipynb) [src/data_stocks.ipynb](src/data_stocks.ipynb): Data checking and processing.
     - [src/pca.ipynb](src/pca.ipynb): High-frequency PCA of the factors estimation.
