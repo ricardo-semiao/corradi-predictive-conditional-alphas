@@ -12,7 +12,21 @@ from collections.abc import Collection
 
 from src.parameters import PARAMETERS as PARS
 from src.parameters import _counts, _trading_days
+import src.utils as ut
 
+ut.set_seed()
+
+
+# Parameters:
+FILL_COLORS = {
+    "10% - 90%": "#ffb399",
+    "20% - 80%": "#ff6699",
+    "30% - 70%": "#ff0000",
+    "40% - 60%": "#ffffff",
+    "median": "black",
+    "non-full factors": "blue",
+    "non-full others": "gray"
+}
 
 
 # Helpers ----------------------------------------------------------------------
@@ -34,6 +48,34 @@ def palette_rescaler(to = (0, 1)):
     return rescaler
 
 
+# Partials ---------------------------------------------------------------------
+
+def riverplot(
+    data: pl.DataFrame, x: str,
+    median_size: float = 0.25, date_breaks: str = "1 year"
+) -> ggplot:
+    g = (
+        ggplot(data, aes(x, group = 1)) +
+        gg.geom_ribbon(aes(ymin = "q1", ymax = "q9", fill = "'10% - 90%'")) +
+        gg.geom_ribbon(aes(ymin = "q2", ymax = "q8", fill = "'20% - 80%'")) +
+        gg.geom_ribbon(aes(ymin = "q3", ymax = "q7", fill = "'30% - 70%'")) +
+        gg.geom_ribbon(aes(ymin = "q4", ymax = "q6", fill = "'40% - 60%'")) +
+        gg.geom_line(aes(y = "median", color = "'median'"), size = median_size) +
+        gg.scale_x_date(date_labels = "%Y", date_breaks = date_breaks) +
+        gg.scale_fill_manual(values = FILL_COLORS) +
+        gg.scale_color_manual(values = FILL_COLORS, name = "") +
+        gg.theme_bw() +
+        gg.theme(
+            axis_text_x = gg.element_text(rotation = 45, hjust = 1),
+            figure_size = (6.5, 5),
+            legend_position = "bottom",
+            legend_box = "vertical",
+            legend_key = gg.element_rect(colour = "black", linewidth = 0.5)
+        )
+    )
+    return g
+
+
 
 # Stocks -----------------------------------------------------------------------
 
@@ -48,17 +90,40 @@ def mean_perc_low_obs(data: pl.DataFrame, x: int) -> pl.Series:
     return res
 
 
-def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> ggplot:
-    g_fill_colors = {
-        "10% - 90%": "#ffb399",
-        "20% - 80%": "#ff6699",
-        "30% - 70%": "#ff0000",
-        "40% - 60%": "#ffffff",
-        "median": "black",
-        "non-full factors": "blue",
-        "non-full others": "gray"
-    }
+def returns_river(
+    data: pl.DataFrame | pl.LazyFrame,
+    x: str, y: str,
+    median_size: float = 0.01, labs: dict[str, str] = {}
+) -> ggplot:
+    data = (
+        data
+        .group_by(x)
+        .agg(
+            median = pl.median(y),
+            **{
+                f"q{q}": pl.quantile(y, q / 10)
+                for q in [4, 6, 3, 7, 2, 8, 1, 9]
+            }
+        )
+        .with_columns(pl.from_epoch("ts_day_ny", time_unit = "d"))
+    )
 
+    if isinstance(data, pl.LazyFrame):
+        data = data.collect()
+
+    guides = gg.guides(color = False) if median_size == 0 else None
+
+    g = (
+        riverplot(data, x, median_size) +
+        gg.scale_y_continuous(labels = lambda bs: [f"{b:.0%}" for b in bs]) +
+        gg.labs(fill = "Quantiles", **labs) +
+        guides
+    )
+
+    return g
+
+
+def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> ggplot:
     data_factor = (
         pl.DataFrame({"d": _trading_days, "n": _counts})
         .filter(pl.col("n") != (PARS.blocks_1min + 1)) # Factor data +1 minute
@@ -71,17 +136,9 @@ def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> ggplot:
     )
 
     g = (
-        ggplot(data, aes("d", group = 1)) +
-        gg.geom_ribbon(aes(ymin = "q1", ymax = "q9", fill = "'10% - 90%'")) +
-        gg.geom_ribbon(aes(ymin = "q2", ymax = "q8", fill = "'20% - 80%'")) +
-        gg.geom_ribbon(aes(ymin = "q3", ymax = "q7", fill = "'30% - 70%'")) +
-        gg.geom_ribbon(aes(ymin = "q4", ymax = "q6", fill = "'40% - 60%'")) +
-        gg.geom_line(aes(y = "median", color = "'median'"), size = 0.25) +
+        riverplot(data, "d") +
         gg.geom_point(aes("d", "n", color = "'non-full factors'"), data_factor, size = 1.5) +
         gg.geom_point(aes("d", "median", color = "'non-full others'"), days_low_obs, size = 1.5) +
-        gg.scale_x_date(date_labels = "%Y", date_breaks = "1 year") +
-        gg.scale_fill_manual(values = g_fill_colors) +
-        gg.scale_color_manual(values = g_fill_colors) +
         gg.scale_y_continuous(labels = lambda bs: [f"{b:.0%}" for b in bs]) +
         gg.labs(
             title = "Proportion of minutes with data within each day",
@@ -92,13 +149,6 @@ def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> ggplot:
             caption = "Non-full others: median $0.1$ points below its 5-day rolling average.",
             y = "Proportion of minutes with data", x = "Day",
             fill = "Quantiles", color = " "
-        ) +
-        gg.theme_bw() +
-        gg.theme(
-            axis_text_x = gg.element_text(rotation = 45, hjust = 1),
-            figure_size = (6.5, 5),
-            legend_position = "bottom",
-            legend_box = "vertical"
         )
     )
 
@@ -234,7 +284,7 @@ def prices_returns(
         gg.scale_color_manual(values = ["red", "green"]) +
         gg.labs(
             title = "Price and log returns across time",
-            subtitle = "Each column is a randomly selected PERMNOs",
+            subtitle = "Each column is a randomly selected PERMNO",
             y = "Value", x = "Time"
         ) +
         gg.theme_bw() +
@@ -387,3 +437,195 @@ def principal_components(
     )
 
     return g
+
+
+
+# Betas ------------------------------------------------------------------------
+
+BETA_LABELS = {
+    f"beta_{i}": f"$\\beta_{i}$" for i in range(1, 7)
+}
+
+def adjusted_returns(
+    vis_permnos: Collection[int],
+    path_adjusted: str = "data/stocks_1min_adjusted.parquet",
+    path_returns: str = "data/stocks_1min_returns.parquet"
+):
+    data = (
+        pl.scan_parquet(path_adjusted)
+        .filter(pl.col("permno").is_in(vis_permnos))
+        .join(
+            pl.scan_parquet(path_returns)
+            .filter(pl.col("permno").is_in(vis_permnos))
+            .group_by("permno", ts_day_ny = pl.col("ts_min_ny") // 1440)
+            .agg(pl.sum("log_return")),
+            on = ["permno", "ts_day_ny"],
+        )
+        .with_columns(
+            pl.from_epoch("ts_day_ny", time_unit = "d"),
+            adjustment = pl.col("log_return") - pl.col("adjusted_return")
+        )
+        .with_columns(adjusted_up = pl.col("adjustment") > 0)
+        .unpivot(index = ["permno", "ts_day_ny", "adjusted_up"])
+        .with_columns(
+            pl.col("variable").str.replace("_", " ")
+            .cast(pl.Enum(("adjustment", "adjusted return", "log return"))),
+            pl.col("adjusted_up").cast(pl.String).cast(pl.Enum(("true", "false")))
+        )
+        .collect()
+    )
+
+    g = (
+        ggplot(data, aes(x = "ts_day_ny", xend = "ts_day_ny", y = 0, yend = "value")) +
+        gg.geom_segment(aes(color = "adjusted_up"), alpha = 0.1) +
+        gg.facet_grid("variable", "permno", scales = "free_x") +
+        gg.scale_x_datetime(date_labels = "%Y", date_breaks = "2 year") +
+        gg.scale_color_manual(values = ["green", "red"]) +
+        gg.labs(
+            title = "Returns and adjustment across time",
+            subtitle = "Each column is a randomly selected PERMNOs",
+            y = "Value", x = "Time",
+            color = "Adjusted up"
+        ) +
+        gg.theme_bw() +
+        gg.theme(
+            axis_text_x = gg.element_text(rotation = 45, hjust = 1),
+            legend_position = "bottom",
+            legend_direction = "horizontal"
+        ) +
+        gg.guides(color = gg.guide_legend(override_aes = {"alpha": 1}))
+    )
+
+    return g
+
+
+def adjusted_returns_river(
+    path_1min: str = "data/stocks_1min_adjusted.parquet",
+    path_5min: str = "data/stocks_5min_adjusted.parquet"
+) -> ggplot:
+    datas = (
+        pl.scan_parquet(path)
+        .group_by("ts_day_ny")
+        .agg(
+            median = pl.median("adjusted_return"),
+            **{
+                f"q{q}": pl.quantile("adjusted_return", q / 10)
+                for q in [4, 6, 3, 7, 2, 8, 1, 9]
+            }
+        )
+        .with_columns(
+            pl.from_epoch("ts_day_ny", time_unit = "d"),
+            frequency = pl.lit(f"{i} minute")
+        )
+        for i, path in [(1, path_1min), (5, path_5min)]
+    )
+    data = pl.concat(datas).collect()
+
+    g = (
+        riverplot(data, "ts_day_ny", 0) +
+        gg.facet_wrap("frequency", nrow = 2) +
+        gg.scale_y_continuous(labels = lambda bs: [f"{b:.0%}" for b in bs]) +
+        gg.labs(
+            title = "Adjusted returns' distribution across time",
+            subtitle = "For each frequency aggregation",
+            fill = "Quantiles", y = "Adjusted return", x = "Time"
+        ) +
+        gg.guides(color = False)
+    )
+
+    return g
+
+
+def betas(
+    vis_permnos: Collection[str],
+    data_path: str = "data/betas_1min.parquet"
+) -> ggplot:
+    data = (
+        pl.scan_parquet(data_path)
+        .filter(pl.col("permno").is_in(vis_permnos))
+        .unpivot(index = ["permno", "ts_day_ny"])
+        .with_columns(
+            pl.from_epoch("ts_day_ny", time_unit = "d"),
+            pl.col("variable").replace(BETA_LABELS)
+        )
+        .collect()
+    )
+
+    g = (
+        ggplot(data, aes("ts_day_ny", "value")) +
+        gg.geom_line(alpha= 0.5) +
+        gg.facet_wrap("variable", nrow = 2, scales = "free_x") +
+        gg.scale_x_date(date_labels = "%Y", date_breaks = "2 years") +
+        gg.labs(
+            title = "Realized betas across time", subtitle = f"For PERMNO {vis_permnos}",
+            x = "Time", y = "Value"
+        ) +
+        gg.theme_bw() +
+        gg.theme(
+            axis_text_x = gg.element_text(rotation = 45, hjust = 1)
+        )
+    )
+
+    return g
+
+
+def betas_river(
+    data_path: str = "data/betas_1min.parquet",
+    D: int = 6
+) -> ggplot:
+    datas = []
+
+    for i in range(1, D + 1):
+        datas.append(
+            pl.scan_parquet(data_path)
+            .group_by("ts_day_ny")
+            .agg(
+                median = pl.median(f"beta_{i}"),
+                **{
+                    f"q{q}": pl.quantile(f"beta_{i}", q / 10)
+                    for q in [4, 6, 3, 7, 2, 8, 1, 9]
+                }
+            )
+            .with_columns(
+                pl.from_epoch("ts_day_ny", time_unit = "d"),
+                beta = pl.lit(f"$\\beta_{i}$")
+            )
+            .collect()
+        )
+
+    g = (
+        riverplot(pl.concat(datas), "ts_day_ny", 0, "2 years") +
+        gg.facet_wrap("beta", nrow = 2, scales = "free_y") +
+        gg.labs(
+            title = "Realized betas' distribution across time",
+            x = "Time", y = "Value", fill = "Quantiles"
+        ) +
+        gg.guides(color = False)
+    )
+
+    return g
+
+
+def frequency_comparison(
+    path_1min: str = "data/stocks_1min_adjusted.parquet",
+    path_5min: str = "data/stocks_5min_adjusted.parquet",
+    col: str = "adjusted_return"
+) -> pl.DataFrame:
+    data = (
+        pl.scan_parquet(path_1min)
+        .join(
+            pl.scan_parquet(path_5min),
+            on = ["permno", "ts_day_ny"], how = "full"
+        )
+        .with_columns(
+            pl.col(col).alias(f"{col}_1min"),
+            pl.col(f"{col}_right").alias(f"{col}_5min"),
+            (pl.col(col) - pl.col(f"{col}_right")).alias(f"{col}_diff")
+        )
+        .select([f"{col}_1min", f"{col}_5min", f"{col}_diff"])
+        .rename(lambda x: x.replace("_", " "))
+        .describe()
+        [2:]
+    )
+
+    return data

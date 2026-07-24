@@ -1,60 +1,65 @@
 project:
-    type: book
-    output-dir: docs
+  type: book
+  output-dir: docs
 
 book:
-    title: Empirical Analysis for "Predictive conditional alphas" (Distaso el. al 2026)
-    author:
-        -   name: |
-                Paper authors: Valentina Corradi, Walter Distaso, \
-                Marcelo Fernandes, and Asger Lunde \ \
-                Research assistant: Ricardo Semião e Castro
-            email: ricardo.semiao@outlook.com
-            url: ricardo-semiao.github.io
-    date: today
-    date-format: "D MMM YYYY"
-    output-file: distaso2026_empirical_analysis
-    chapters:
-    - index.md # Copy of README.md, created and deleted by src/quarto_render.ps1
-    - src/data_factors.ipynb
-    - src/data_stocks.ipynb
-    - src/pca.ipynb
-    - src/betas.ipynb
-    - src/alphas.ipynb
-    - docs/references.md
+  title: Empirical Analysis for "Predictive conditional alphas" (Distaso el. al 2026)
+  author:
+    - name: |
+        Paper authors: Valentina Corradi, Walter Distaso, \
+        Marcelo Fernandes, and Asger Lunde \ \
+        Research assistant: Ricardo Semião e Castro
+      email: ricardo.semiao@outlook.com
+      url: ricardo-semiao.github.io
+  date: today
+  date-format: "D MMM YYYY"
+  output-file: distaso2026_empirical_analysis
+  chapters:
+  - index.md # Copy of README.md, created and deleted by src/quarto_render.ps1
+  - src/data_factors.ipynb
+  - src/data_stocks.ipynb
+  - src/pca.ipynb
+  - src/betas.ipynb
+  - src/alphas.ipynb
+  - docs/references.md
 
 bibliography: bibliography/references.bib
 
 execute:
-    eval: true
-    warning: false
-    error: false
+  eval: true
+  warning: false
+  error: true
 
 format:
-    pdf:
-        title-meta: Distaso 2026 Empirical Analysis
-        author-meta: Ricardo Semião e Castro
-        documentclass: scrreprt #report or scrreprt
-        classoption: [headings=small, titlepage=false]
-        keep-tex: true
-        toc: true
-        toc-depth: 2
-        number-depth: 3
-        colorlinks: true
-        citecolor: green
-        linkcolor: orange
-        urlcolor: blue
-        include-in-header:  
-            text: |
-                \usepackage[a4paper, left=2cm, right=2cm, top=2cm, bottom=2.5cm]{geometry}
-                \numberwithin{equation}{section}
-                \numberwithin{table}{section}
-                \numberwithin{figure}{section}
+  pdf:
+    title-meta: Distaso 2026 Empirical Analysis
+    author-meta: Ricardo Semião e Castro
+    documentclass: scrreprt #report or scrreprt
+    classoption: [headings=small, titlepage=false]
+    keep-tex: true
+    toc: true
+    toc-depth: 2
+    number-depth: 3
+    colorlinks: true
+    citecolor: green
+    linkcolor: orange
+    urlcolor: blue
+    include-in-header:  
+      text: |
+        \usepackage[a4paper, left=2cm, right=2cm, top=2cm, bottom=2.5cm]{geometry}
 
-                \setuptoc{toc}{leveldown}
-                %\usepackage{xpatch}
-                %\makeatletter
-                %\xpatchcmd{\maketitle}{\if@twoside\next@tpage}{\iffalse}{}{}
-                %\makeatother
+        \usepackage{amsmath}
+        \usepackage{amssymb}
+        \usepackage{mathtools}
 
-                %\setkomafont{chapter}{\Large} 
+        \numberwithin{equation}{section}
+        \numberwithin{table}{section}
+        \numberwithin{figure}{section}
+
+        \setuptoc{toc}{leveldown}
+        %\usepackage{xpatch}
+        %\makeatletter
+        %\xpatchcmd{\maketitle}{\if@twoside\next@tpage}{\iffalse}{}{}
+        %\makeatother
+
+        %\setkomafont{chapter}{\Large} 

@@ -9,9 +9,26 @@ if os.getcwd() not in sys.path: sys.path.insert(0, os.getcwd())
 import polars as pl
 import numpy as np
 
+from itertools import compress
+
 from numpy.typing import NDArray
 
 from src.parameters import PARAMETERS as PARS
+from src.betas_mp import ResultsRealized
+
+
+
+# General helpers --------------------------------------------------------------
+
+SEED = 8283037
+def set_seed(seed: int = SEED) -> None:
+    np.random.seed(seed)
+    pl.set_random_seed(seed)
+    # Note: CuPy.random is not invoked
+
+
+def compress_list(data, selectors):
+    return list(compress(data, selectors))
 
 
 
@@ -128,6 +145,106 @@ def pca_high_freq_validate(
 # C = 3.0 * np.sqrt((np.pi / 2) * np.sum(np.abs(X[1:] * X[:-1]), axis=0))
 # varpi = np.log(np.maximum(u / C, 1e-12)) / np.log(1 / T)
 # u_conforms = np.all((varpi >= (1 - varsigma) / (2 - gamma)) & (varpi < 0.5))
+
+
+
+# Betas helpers ----------------------------------------------------------------
+
+def check_index_real(
+    data_betas: dict[int, pl.DataFrame],
+    data_adjusted: dict[int, pl.DataFrame]
+) -> None:
+    cols = ["permno", "ts_day_ny"]
+
+    if not data_betas[1].is_sorted(cols):
+        raise ValueError("data_betas[1] is not sorted by permno and ts_day_ny")
+
+    if data_betas[1][cols].is_duplicated().any():
+        raise ValueError("data_betas[1] has duplicated permno-ts_day_ny pairs")
+
+    if not (data_betas[1][cols] == data_betas[5][cols]).to_numpy().all():
+        raise ValueError("data_betas[5] have different permno-ts_day_ny pairs")
+
+    if not (
+        data_betas[1][cols].filter((pl.row_index() > 0).over("permno"))
+        == data_adjusted[1][cols]
+    ).to_numpy().all():
+        raise ValueError("data_adjusted[1] have different permno-ts_day_ny pairs")
+
+    if not (data_adjusted[1][cols] == data_adjusted[5][cols]).to_numpy().all():
+        raise ValueError("data_adjusted[5] have different permno-ts_day_ny pairs")
+
+    for data in list(data_betas.values()) + list(data_adjusted.values()):
+        data_problems = data.filter(pl.any_horizontal(
+            pl.all().is_null(),
+            pl.all().is_nan(),
+            pl.all().is_infinite()
+        ))
+
+        if data_problems.shape[0] > 0:
+            raise ValueError(f"Data has NaNs/Infs/nulls:\n{data_problems}")
+
+
+def save_results(
+    results: ResultsRealized, F_m1_idx: NDArray, D: int
+) -> None:
+    # Remove stocks with only one day of data # Todo: should be removed in data_stocks.ipynb
+    mask_multi_day = [de - ds > 1 for ds, de in results["day_range"]]
+
+    days_list = compress_list(
+        [F_m1_idx[ds*390 : de*390 : 390] // 1440 for ds, de in results["day_range"]],
+        mask_multi_day
+    )
+    permnos_list = compress_list(results["permno"], mask_multi_day)
+
+    data_betas = {}
+    data_adjusted = {}
+
+    for freq in ["m1", "m5"]:
+        betas_list, adj_list = zip(*results[freq])
+        betas_list, adj_list = (
+            compress_list(x, mask_multi_day)
+            for x in [betas_list, adj_list]
+        )
+
+        freq_n = 1 if freq == "m1" else 5
+
+        betas = (
+            pl.DataFrame({
+                "permno": permnos_list,
+                "ts_day_ny": days_list,
+                **{f"beta_{d+1}": [b[:, d] for b in betas_list] for d in range(D)}
+            })
+            .explode(["ts_day_ny"] + [f"beta_{d+1}" for d in range(D)])
+            .with_columns(
+                pl.col("ts_day_ny").cast(pl.UInt32),
+                pl.col("permno").cast(pl.UInt32)
+            )
+        )
+        data_betas[freq_n] = betas
+
+        adjusted = (
+            pl.DataFrame({
+                "permno": permnos_list,
+                "ts_day_ny": [x[1:] for x in days_list],
+                "adjusted_return": adj_list,
+            })
+            .explode(["ts_day_ny", "adjusted_return"])
+            .with_columns(
+                pl.col("ts_day_ny").cast(pl.UInt32),
+                pl.col("permno").cast(pl.UInt32)
+            )
+        )
+        data_adjusted[freq_n] = adjusted
+
+    # Checks:
+    #check_index_real(data_betas, data_adjusted)
+
+    # Save results:
+    for freq in [1, 5]:
+        freq_label = "1min" if freq == 1 else "5min"
+        data_betas[freq].write_parquet(f"data/betas_{freq_label}.parquet")
+        data_adjusted[freq].write_parquet(f"data/stocks_{freq_label}_adjusted.parquet")
 
 
 

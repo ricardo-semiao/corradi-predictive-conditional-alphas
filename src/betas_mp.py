@@ -63,7 +63,7 @@ def freq_results(
     F: NDArray, P: NDArray, # (T_s * M, D), (T_s * M,)
     M: int,
     F_day_s: NDArray, P_day_s: NDArray, # (T_s - 1, D), (T_s - 1,)
-    T_s: int
+    T_s: np.int64
 ) -> tuple[NDArray, NDArray]: # (T_s, D), (T_s - 1,)
     # Reshape into tensors:
     FF = rearrange(F, '(t m) d -> t m d', t = T_s, m = M) # (T_s, M, D)
@@ -92,7 +92,7 @@ def freq_results(
 
 class ResultsStock(TypedDict):
     permno: int
-    day_range: tuple[int, int]
+    day_range: tuple[np.int64, np.int64]
     m1: tuple[NDArray, NDArray] # (T_s, D), (T_s - 1,)
     m5: tuple[NDArray, NDArray] # (T_s, D), (T_s - 1,)
 
@@ -112,10 +112,10 @@ def stock_results_mp(permno: int, P_filepath: str) -> ResultsStock:
     P_m1_idx = P_query["ts_min_ny"].to_numpy() # (T_s * M1,)
 
     # Crop data to stock's window:
-    idx_start: int = np.searchsorted(F_m1_idx, P_m1_idx[0])
-    idx_end: int = np.searchsorted(F_m1_idx, P_m1_idx[-1], side = "right")
+    idx_start: np.int64 = np.searchsorted(F_m1_idx, P_m1_idx[0])
+    idx_end: np.int64 = np.searchsorted(F_m1_idx, P_m1_idx[-1], side = "right")
     day_start = idx_start // 390 # First minute of first day (left-closed)
-    day_end = int(np.ceil(idx_end / 390)) # First minute of last day + 1 (right-open)
+    day_end = np.int64(np.ceil(idx_end / 390)) # First minute of last day + 1 (right-open)
     T_s = day_end - day_start
 
     F_m1_s = F_m1[day_start * 390 : day_end * 390, :] # (T_s * M1, D)
@@ -123,12 +123,13 @@ def stock_results_mp(permno: int, P_filepath: str) -> ResultsStock:
 
     # Crop P_m1 to (day_start, day_end), set missing to 0:
     F_m1_s_idx = F_m1_idx[day_start * 390 : day_end * 390]
-    valid_idx = (P_m1_idx >= F_m1_s_idx[0]) & (P_m1_idx <= F_m1_s_idx[-1])
+
+    fs_in_p = np.clip(np.searchsorted(F_m1_s_idx, P_m1_idx), 0, len(F_m1_s_idx) - 1)
+    fs_in_p_exact = F_m1_s_idx[fs_in_p] == P_m1_idx
     # To solve out-of-bounds indexing (TODO: happens for permno 22859)
 
     P_m1_s = np.zeros(T_s * 390, dtype = np.float64) # (T_s * M1,)
-    min_with_data = np.searchsorted(F_m1_s_idx, P_m1_idx[valid_idx])
-    P_m1_s[min_with_data] = P_m1[valid_idx]
+    P_m1_s[fs_in_p[fs_in_p_exact]] = P_m1[fs_in_p_exact]
 
     # Aggregate to different frequencies, get t+1 day returns:
     P_m5_s  = reduce(P_m1_s, '(t m) -> t', 'sum', m = 5)             # (T_s * M5,)
@@ -144,6 +145,7 @@ def stock_results_mp(permno: int, P_filepath: str) -> ResultsStock:
     }
 
     return results_permno
+# Note: it would be better to save 390, 78 as constants
 
 
 
@@ -191,6 +193,7 @@ def betas_returns_realized_mp(
                 results["m5"].append(results_stock["m5"])
 
     return results
+# Note: this could be defined elsewhere to not pass to workers, but it is a low cost
 
 
 
