@@ -8,6 +8,8 @@ import matplotlib as mpl
 import plotnine as gg
 from plotnine import ggplot, aes
 
+from collections.abc import Collection
+
 from src.parameters import PARAMETERS as PARS
 from src.parameters import _counts, _trading_days
 
@@ -25,12 +27,28 @@ def palette_cmap(
     res = [mpl.colors.to_hex(color) for color in base_cmap(color_points)]
     return res[::-1] if rev else res
 
+def palette_rescaler(to = (0, 1)):
+    def rescaler(x, _from = None):
+        __from = (np.min(x), np.max(x)) if _from is None else _from
+        return np.interp(x, __from, to)
+    return rescaler
+
 
 
 # Stocks -----------------------------------------------------------------------
 
+# Calculate stock day fullness
+def mean_perc_low_obs(data: pl.DataFrame, x: int) -> pl.Series:
+    res = (
+        data
+        .group_by("permno")
+        .agg(((pl.col("obs_count") >= x) / pl.len()).sum())
+        ["obs_count"]
+    )
+    return res
 
-def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> gg.ggplot:
+
+def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> ggplot:
     g_fill_colors = {
         "10% - 90%": "#ffb399",
         "20% - 80%": "#ff6699",
@@ -64,7 +82,7 @@ def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> gg.ggplot:
         gg.scale_x_date(date_labels = "%Y", date_breaks = "1 year") +
         gg.scale_fill_manual(values = g_fill_colors) +
         gg.scale_color_manual(values = g_fill_colors) +
-        gg.scale_y_continuous(labels = lambda bs: ["{:.0%}".format(b) for b in bs]) +
+        gg.scale_y_continuous(labels = lambda bs: [f"{b:.0%}" for b in bs]) +
         gg.labs(
             title = "Proportion of minutes with data within each day",
             subtitle = (
@@ -89,16 +107,7 @@ def day_fullness_river(data: pl.DataFrame, n: int | str = "") -> gg.ggplot:
 
 def day_fullness_box(
     data: pl.DataFrame, min: int = 1, n: int | str = ""
-) -> gg.ggplot:
-    def mean_perc_low_obs(x: int) -> pl.Series:
-        res = (
-            data
-            .group_by("permno")
-            .agg(((pl.col("obs_count") >= x) / pl.len()).sum())
-            ["obs_count"]
-        )
-        return res
-
+) -> ggplot:
     if min == 1:
         k = (PARS.blocks_5min // 2) # 36
         divs = range(PARS.blocks_1min // k)
@@ -110,7 +119,7 @@ def day_fullness_box(
 
     gdata = (
         pl.DataFrame({
-            f"below_{(i + 1) * k}": mean_perc_low_obs((i + 1) * k)
+            f"below_{(i + 1) * k}": mean_perc_low_obs(data, (i + 1) * k)
             for i in divs
         })
         .unpivot(on = None, variable_name = "n_obs", value_name = "perc_low_obs")
@@ -121,10 +130,10 @@ def day_fullness_box(
     )
 
     g = (
-        gg.ggplot(gdata, gg.aes("n_obs", "perc_low_obs")) +
+        ggplot(gdata, gg.aes("n_obs", "perc_low_obs")) +
         gg.geom_boxplot() +
         gg.geom_hline(yintercept = 0.975, linetype = "dashed", color = "red") +
-        gg.scale_y_continuous(labels = lambda bs: ["{:.0%}".format(b) for b in bs]) +
+        gg.scale_y_continuous(labels = lambda bs: [f"{b:.0%}" for b in bs]) +
         gg.labs(
             title = "Distribution of days' observation count ($n$)",
             subtitle = f"Across all {n} stocks",
@@ -138,7 +147,51 @@ def day_fullness_box(
     return g
 
 
-def day_fullness_hist(data: pl.DataFrame) -> gg.ggplot:
+def day_fullness_matrix(
+    data: pl.DataFrame, min_obs: Collection[int], min_days: Collection[float],
+    n: int | str = ""
+) -> ggplot:
+    res = np.full((len(min_obs), len(min_days)), np.nan)
+    for i, min in enumerate(min_obs):
+        for j, days in enumerate(min_days):
+            res[i, j] = (
+                data
+                .group_by("permno")
+                .agg(((pl.col("obs_count")  >= min).sum() / pl.len()) >= days)
+                ["obs_count"].sum()
+            )
+
+    cols = [str(d) for d in min_days]
+    gdata = (
+        pl.DataFrame(res, schema = cols)
+        .with_columns(pl.Series("min_obs", min_obs))
+        .unpivot(
+            on = cols, index = "min_obs",
+            variable_name = "min_days", value_name = "n_stocks"
+        )
+        .with_columns(pl.col("min_days").cast(pl.Float64))
+    )
+
+    g = (
+        ggplot(gdata, gg.aes("min_obs", "min_days", fill = "n_stocks")) +
+        gg.geom_raster() +
+        gg.geom_text(aes(label = "n_stocks"), size = 6) +
+        gg.scale_y_continuous(labels = lambda bs: [f"{b:.1%}" for b in bs], breaks = list(min_days)) +
+        gg.scale_x_continuous(breaks = list(min_obs)) +
+        gg.scale_fill_continuous(rescaler = palette_rescaler((0.2, 1))) +
+        gg.labs(
+            title = "Stocks with $p$% days where $\\tau$ minutes had trades",
+            subtitle = f"Across all {n} stocks",
+            fill = "Stocks count",
+            y = "$p$", x = "$\\tau$"
+        ) +
+        gg.theme_bw()
+    )
+
+    return g
+
+
+def day_fullness_hist(data: pl.DataFrame) -> ggplot:
     g = (
         ggplot(data, aes("obs_count", gg.after_stat("density"))) +
         gg.geom_histogram(bins = 40) +
@@ -155,7 +208,7 @@ def day_fullness_hist(data: pl.DataFrame) -> gg.ggplot:
 
 def prices_returns(
     data_prices: pl.DataFrame, data_returns: pl.DataFrame
-) -> gg.ggplot:
+) -> ggplot:
     datas = {
         key: (
             df
@@ -181,7 +234,7 @@ def prices_returns(
         gg.scale_color_manual(values = ["red", "green"]) +
         gg.labs(
             title = "Price and log returns across time",
-            subtitle = f"Each column is a randomly selected PERMNOs",
+            subtitle = "Each column is a randomly selected PERMNOs",
             y = "Value", x = "Time"
         ) +
         gg.theme_bw() +
@@ -198,11 +251,11 @@ def prices_returns(
 # Factors ----------------------------------------------------------------------
 
 def factors(
-    data: pl.DataFrame, cols: list[str],
+    data: pl.DataFrame, cols: dict[str, str],
     segment_color: str | None = "value > 0",
     title: str = "Minute log returns of the Fama-French 6 factors"
-) -> gg.ggplot:
-    cols_extra = set(data.columns) - set(cols)
+) -> ggplot:
+    cols_extra = set(data.columns) - set(cols.keys())
     gdata = (
         data
         .group_by(datetime = pl.col("datetime").dt.date())
@@ -210,7 +263,10 @@ def factors(
             [pl.col(col).sum() for col in cols]
             + [pl.col(col).first() for col in cols_extra - {"datetime"}]
         )
-        .unpivot(cols, index = list(cols_extra))
+        .unpivot(list(cols.keys()), index = list(cols_extra))
+        .with_columns(
+            pl.col("variable").replace(cols).cast(pl.Enum(list(cols.values())))
+        )
     )
 
     g = (
@@ -242,9 +298,9 @@ def factors(
 def factor_loadings(
     data: pl.DataFrame,
     cols: list[str],
-    block_size: int | float,
-    exp: int | float = 1
-) -> gg.ggplot:
+    block_size: float,
+    exp: float = 1
+) -> ggplot:
     gdata = (
         data
         .unpivot(cols, index = ["block", "fct"], variable_name = "pc")
@@ -282,7 +338,7 @@ def principal_components(
     data_evals: pl.DataFrame, data_pcs: pl.DataFrame,
     blocks_size: int,
     cols_evals: list[str], cols_pc: list[str]
-) -> gg.ggplot:
+) -> ggplot:
     evalues_repeated = (
         data_evals
         .with_columns(

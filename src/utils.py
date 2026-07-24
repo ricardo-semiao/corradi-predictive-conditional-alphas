@@ -6,16 +6,12 @@ import sys
 if os.path.basename(os.getcwd()) == "src": os.chdir("..")
 if os.getcwd() not in sys.path: sys.path.insert(0, os.getcwd())
 
-import re
-import random
-
 import polars as pl
 import numpy as np
 
 from numpy.typing import NDArray
 
 from src.parameters import PARAMETERS as PARS
-from src.parameters import _counts, _trading_days
 
 
 
@@ -125,10 +121,8 @@ def pca_high_freq_validate(
                 "`X.shape[1]`) dimensions."
             )
 
-    return None
-
 # TODO: Warn if u is too big given X general level
-# TODO: Implement k and u bounds from proposition 3
+# TODO: Implement k and u bounds from proposition 3:
 # varsigma = np.log(k) / np.log(T)
 # k_conforms = (gamma / 2) < varsigma < 0.5
 # C = 3.0 * np.sqrt((np.pi / 2) * np.sum(np.abs(X[1:] * X[:-1]), axis=0))

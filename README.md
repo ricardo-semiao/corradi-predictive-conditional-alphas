@@ -22,7 +22,7 @@ The repository is organized as follows:
 
 - [data](data): not committed due to size.
     - [data/stocks_raw](data/stocks_raw) and [stocks_1min_returns.parquet](stocks_1min_returns.parquet): raw stocks from the TAQ database plus intermediate transformations, and the stocks log-returns at the 1-minute frequency.
-    - [data/factors_1min_returns_raw.csv](data/factors_1min_returns_raw.csv), [data/factors_1min_returns.csv](data/factors_1min_returns.csv) and [data/factors_5min_returns.csv](data/factors_5min_returns.csv): Factor returns at the 1-minute and 5-minute frequencies. The raw data is available at [www.sakethaleti.com/data](https://www.sakethaleti.com/data).
+    - [data/factors_raw/ff6_1min_returns.csv](data/factors_raw/ff6_1min_returns.csv), [data/factors_1min_returns.csv](data/factors_1min_returns.csv) and [data/factors_5min_returns.csv](data/factors_5min_returns.csv): Factor returns at the 1-minute and 5-minute frequencies. The raw data is available at [www.sakethaleti.com/data](https://www.sakethaleti.com/data).
     - [data/pca_1min.csv](data/pca_1min.csv) and [data/pca_5min.csv](data/pca_5min.csv): Principal components of the factors at the 1-minute and 5-minute frequencies.
 - [src](src): Most files here are sections of the report.
     - [src/data_factors.ipynb](src/data_factors.ipynb) [src/data_stocks.ipynb](src/data_stocks.ipynb): Data checking and processing.
