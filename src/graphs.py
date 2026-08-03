@@ -105,7 +105,6 @@ def returns_river(
                 for q in [4, 6, 3, 7, 2, 8, 1, 9]
             }
         )
-        .with_columns(pl.from_epoch("ts_day_ny", time_unit = "d"))
     )
 
     if isinstance(data, pl.LazyFrame):
@@ -620,9 +619,36 @@ def frequency_comparison(
         .with_columns(
             pl.col(col).alias(f"{col}_1min"),
             pl.col(f"{col}_right").alias(f"{col}_5min"),
-            (pl.col(col) - pl.col(f"{col}_right")).alias(f"{col}_diff")
+            (pl.col(col) - pl.col(f"{col}_right")).abs().alias(f"{col}_diff")
         )
         .select([f"{col}_1min", f"{col}_5min", f"{col}_diff"])
+        .rename(lambda x: x.replace("_", " "))
+        .describe()
+        [2:]
+    )
+
+    return data
+
+def frequency_comparison_all(
+    path_1min: str = "data/betas_1min.parquet",
+    path_5min: str = "data/betas_5min.parquet"
+) -> pl.DataFrame:
+    data = (
+        pl.scan_parquet(path_1min)
+        .with_columns(beta = pl.mean_horizontal(pl.col("^beta_[0-9]$")))
+        .join(
+            (
+                pl.scan_parquet(path_5min)
+                .with_columns(beta = pl.mean_horizontal(pl.col("^beta_[0-9]$")))
+            ),
+            on = ["permno", "ts_day_ny"], how = "full"
+        )
+        .with_columns(
+            pl.col("beta").alias("beta_1min"),
+            pl.col("beta_right").alias("beta_5min"),
+            (pl.col("beta") - pl.col("beta_right")).abs().alias("beta_diff")
+        )
+        .select(["beta_1min", "beta_5min", "beta_diff"])
         .rename(lambda x: x.replace("_", " "))
         .describe()
         [2:]

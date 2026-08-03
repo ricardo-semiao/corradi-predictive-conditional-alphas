@@ -34,7 +34,7 @@ format:
   pdf:
     title-meta: Distaso 2026 Empirical Analysis
     author-meta: Ricardo Semião e Castro
-    documentclass: scrreprt #report or scrreprt
+    documentclass: scrreprt
     classoption: [headings=small, titlepage=false]
     keep-tex: true
     toc: true
@@ -48,8 +48,8 @@ format:
       text: |
         \usepackage[a4paper, left=2cm, right=2cm, top=2cm, bottom=2.5cm]{geometry}
 
-        \usepackage{amsmath}
-        \usepackage{amssymb}
+        %\usepackage{amsmath}
+        %\usepackage{amssymb}
         \usepackage{mathtools}
 
         \numberwithin{equation}{section}
@@ -57,9 +57,3 @@ format:
         \numberwithin{figure}{section}
 
         \setuptoc{toc}{leveldown}
-        %\usepackage{xpatch}
-        %\makeatletter
-        %\xpatchcmd{\maketitle}{\if@twoside\next@tpage}{\iffalse}{}{}
-        %\makeatother
-
-        %\setkomafont{chapter}{\Large} 
