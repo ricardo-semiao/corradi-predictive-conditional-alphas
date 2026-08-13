@@ -9,6 +9,7 @@ import plotnine as gg
 from plotnine import ggplot, aes
 
 from collections.abc import Collection
+from typing import Literal
 
 from src.parameters import PARAMETERS as PARS
 from src.parameters import _counts, _trading_days
@@ -536,7 +537,7 @@ def adjusted_returns_river(
 
 
 def betas(
-    vis_permnos: Collection[str],
+    vis_permnos: Collection[int],
     data_path: str = "data/betas_1min.parquet"
 ) -> ggplot:
     data = (
@@ -659,3 +660,68 @@ def frequency_comparison_all(
     )
 
     return data
+
+
+
+# Alphas -----------------------------------------------------------------------
+
+def alphas(
+    vis_permnos: Collection[int],
+    data_path: str = "data/alphas_1min.parquet",
+    alpha_col: Literal["alpha", "linear_alpha"] = "alpha"
+) -> ggplot:
+    data = (
+        pl.scan_parquet(data_path)
+        .filter(pl.col("permno").is_in(vis_permnos))
+        .with_columns(pl.from_epoch("ts_day_ny", time_unit = "d"))
+        .select(["permno", "ts_day_ny", alpha_col])
+        .collect()
+    )
+
+    g = (
+        ggplot(data, aes("ts_day_ny", alpha_col)) +
+        gg.geom_line(alpha = 0.5) +
+        gg.facet_wrap("permno") +
+        gg.scale_x_date(date_labels = "%Y", date_breaks = "2 years") +
+        gg.labs(
+            title = "Alphas across time", subtitle = f"For PERMNOs {vis_permnos}",
+            x = "Time", y = "Value"
+        ) +
+        gg.theme_bw() +
+        gg.theme(
+            axis_text_x = gg.element_text(rotation = 45, hjust = 1)
+        )
+    )
+
+    return g
+
+
+def alphas_river(
+    data_path: str = "data/alphas_1min.parquet",
+    alpha_col: Literal["alpha", "linear_alpha"] = "alpha"
+) -> ggplot:
+    data = (
+        pl.scan_parquet(data_path)
+        .group_by("ts_day_ny")
+        .agg(
+            median = pl.median(alpha_col),
+            **{
+                f"q{q}": pl.quantile(alpha_col, q / 10)
+                for q in [4, 6, 3, 7, 2, 8, 1, 9]
+            }
+        )
+        .with_columns(pl.from_epoch("ts_day_ny", time_unit = "d"))
+        .collect()
+    )
+
+
+    g = (
+        riverplot(data, "ts_day_ny", 0, "2 years") +
+        gg.labs(
+            title = "Alphas' distribution across time",
+            x = "Time", y = "Value", fill = "Quantiles"
+        ) +
+        gg.guides(color = False)
+    )
+
+    return g
