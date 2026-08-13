@@ -570,7 +570,8 @@ def betas(
 
 def betas_river(
     data_path: str = "data/betas_1min.parquet",
-    D: int = 6
+    D: int = 6,
+    facet_betas: bool = True
 ) -> ggplot:
     datas = []
 
@@ -592,15 +593,18 @@ def betas_river(
             .collect()
         )
 
+
     g = (
         riverplot(pl.concat(datas), "ts_day_ny", 0, "2 years") +
-        gg.facet_wrap("beta", nrow = 2, scales = "free_y") +
         gg.labs(
             title = "Realized betas' distribution across time",
             x = "Time", y = "Value", fill = "Quantiles"
         ) +
         gg.guides(color = False)
     )
+
+    if facet_betas :
+        g += gg.facet_wrap("beta", nrow = 2, scales = "free_y")
 
     return g
 

@@ -221,6 +221,6 @@ if __name__ == "__main__":
         P_filepath = "data/stocks_1min_returns.parquet",
         F_m1 = F_m1, F_m5 = F_m5,
         F_m1_idx = F_m1_idx,
-        max_workers = 7,
+        max_workers = 6,
         chunksize = 20
     )
