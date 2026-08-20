@@ -29,7 +29,7 @@ class AlphasParameters(NamedTuple):
 
 PARS_ALPHAS: Final[AlphasParameters] = AlphasParameters(
     window_warmup = 500,
-    scaler = 1.0,
+    scaler = 3.5,
     trim_exp = 0.2,
     k = 3
 )
