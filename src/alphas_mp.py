@@ -29,7 +29,7 @@ class AlphasParameters(NamedTuple):
 
 PARS_ALPHAS: Final[AlphasParameters] = AlphasParameters(
     window_warmup = 500,
-    scaler = 3.5,
+    scaler = 8,
     trim_exp = 0.2,
     k = 3
 )
@@ -88,7 +88,7 @@ def cae_gauss_trim(
     h_W: np.float64,               # Kernel bandwidth (h_W)
     d_W: np.float64                # Trimming density threshold (d_W)
 ) -> float:
-    K_1_Wm1 = kernel_gauss((PC_1_Wm1 - PC_t) / h_W)  # (T-1,)
+    K_1_Wm1 = kernel_gauss((PC_1_Wm1 - PC_t) / (h_W * PARS_ALPHAS.scaler))  # (T-1,)
     deno = np.mean(K_1_Wm1) / (h_W ** PARS_ALPHAS.k) # Across t
 
     if deno <= d_W or np.isnan(deno):
@@ -206,7 +206,7 @@ if __name__ == "__main__":
         ['permno'].unique().to_list()
     )
     result = alphas_mp(
-        permnos[:210],
+        permnos,
         (
             "data/states_raw/states_clean.parquet",
             "data/stocks_1min_adjusted.parquet",

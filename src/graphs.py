@@ -702,6 +702,7 @@ def alphas_river(
 ) -> ggplot:
     data = (
         pl.scan_parquet(data_path)
+        .drop_nans(alpha_col)
         .group_by("ts_day_ny")
         .agg(
             median = pl.median(alpha_col),
