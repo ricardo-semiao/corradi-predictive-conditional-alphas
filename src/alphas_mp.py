@@ -76,6 +76,9 @@ INV_SQRT_2PI_K: float = (
     ** PARS_ALPHAS.k
 )
 
+TRIM_SCALER = 0.01 * (2.0 * np.pi) ** (- PARS_ALPHAS.k / 2.0)
+# Try 0.01 to 0.05
+
 def kernel_gauss(
     x: NDArray[np.float64]
 ) -> NDArray[np.float64]:
@@ -87,15 +90,19 @@ def cae_gauss_trim(
     PC_1_Wm1: NDArray[np.float64], # (W-1, k) historical state variables (PC_{1:W-1})
     h_W: np.float64,               # Kernel bandwidth (h_W)
     d_W: np.float64                # Trimming density threshold (d_W)
-) -> float:
-    K_1_Wm1 = kernel_gauss((PC_1_Wm1 - PC_t) / (h_W * PARS_ALPHAS.scaler))  # (T-1,)
+) -> float: # TODO: np.float64?
+    h_W = h_W * PARS_ALPHAS.scaler
+
+    K_1_Wm1 = kernel_gauss((PC_1_Wm1 - PC_t) / h_W)  # (T-1,)
     deno = np.mean(K_1_Wm1) / (h_W ** PARS_ALPHAS.k) # Across t
 
-    if deno <= d_W or np.isnan(deno):
+    if np.isnan(deno):
+        raise ValueError("Denominator is NaN in cae_gauss_trim.")
+    if deno <= d_W * TRIM_SCALER:
         return 0.0
 
-    num = np.mean(K_1_Wm1 * Z_2_W) # Across t
-    return float(num / deno)
+    #num = np.mean(K_1_Wm1 * Z_2_W) # Across t
+    return float(np.average(Z_2_W, weights = K_1_Wm1)) #or num / deno
 # We could use denominator cancellation to avoid some np.mean()
 
 
@@ -206,13 +213,13 @@ if __name__ == "__main__":
         ['permno'].unique().to_list()
     )
     result = alphas_mp(
-        permnos,
+        permnos[:120],
         (
             "data/states_raw/states_clean.parquet",
             "data/stocks_1min_adjusted.parquet",
             "data/states_raw/windows_args.pkl"
         ),
-        max_workers = 6, chunksize = 10
+        max_workers = 6, chunksize = 2
     )
-    result.write_parquet("data/stocks_1min_alphas.parquet")
+    result.write_parquet("data/alphas_1min.parquet")
     print(result)
