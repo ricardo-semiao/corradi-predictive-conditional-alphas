@@ -9,6 +9,7 @@ dependencies = [
     "cutensor-cu12>=2.7.0",
     "duckdb>=1.5.4",
     "einops>=0.8.2",
+    "great-tables>=0.24.0",
     "h5py>=3.16.0",
     "numpy>=2.5.1",
     "pandas-market-calendars>=5.4.0",

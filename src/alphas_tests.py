@@ -33,7 +33,7 @@ class AlphasParameters(NamedTuple):
 PARS_ALPHAS: Final[AlphasParameters] = AlphasParameters(
     window_warmup = 500,
     #scaler = 1,      # Try 0.5, 1, 2, 3.5
-    trim_exp = 0.25,  # Bounded by (0, 1/4)
+    trim_exp = 0.2,  # Bounded by (0, 1/4)
     trim_scaler = 1, # 1 to turn on 0 to turn off
     k = 3
 )
@@ -160,6 +160,19 @@ def cae_gauss_trim(
     return num / deno
 # NOTE: We could use denominator cancellation to avoid some np.mean()
 
+def cae_deno(
+    PC_W: NDArray[np.float64],     # (k,) conditioning state variables at time t (PC_W)
+    Z_2_W: NDArray[np.float64],    # (W-1,) target risk-adjusted returns (Z_{2:W})
+    PC_1_Wm1: NDArray[np.float64], # (W-1, k) historical state variables (PC_{1:W-1})
+    h_W: np.float64,               # Kernel bandwidth (h_W)
+    d_W: np.float64                # Trimming density threshold (d_W)
+) -> np.float64:
+    K_1_Wm1 = kernel_gauss((PC_1_Wm1 - PC_W) / h_W)  # (T-1,)
+    K_x = K_1_Wm1 / (h_W ** k)
+    deno = np.mean(K_x) # Across t
+
+    return deno
+
 
 def cae_linear(
     PC_W: NDArray[np.float64],    # (k,)
@@ -261,20 +274,19 @@ def get_permno_alphas(
         h_W = bandrate * scaler # PARS_ALPHAS.scaler
         #d_W = h_W ** PARS_ALPHAS.trim_exp * (INV_SQRT_2PI_K ** PARS_ALPHAS.trim_scaler)
         #d_W = bandrate ** PARS_ALPHAS.trim_exp * (INV_SQRT_2PI_K ** PARS_ALPHAS.trim_scaler)
-        if trim_option == "0":
-            d_W = 0
-        elif trim_option == "ln2":
-            d_W = h_W ** PARS_ALPHAS.trim_exp / (np.log(W) ** 2)
-        elif trim_option == "ln1":
-            d_W = h_W ** PARS_ALPHAS.trim_exp / np.log(W)
+        #if trim_option == "0":
+        #    d_W = 0
+        #else:
+        #    d_W = h_W ** 0.25 / (np.log(W) ** 2)
 
         # Compute alphas:
         PC_W = PC_1_W[-1, :]
         PC_1_Wm1 = PC_1_W[:-1, :]
         Z_2_W = Z_1_T[1:w]
 
-        res_linear[wi] = cae_linear(PC_W, Z_2_W, PC_1_Wm1)
-        res_alpha[wi] = cae_gauss_trim(PC_W, Z_2_W, PC_1_Wm1, h_W, d_W)
+        #res_linear[wi] = cae_linear(PC_W, Z_2_W, PC_1_Wm1)
+        #res_alpha[wi] = cae_gauss_trim(PC_W, Z_2_W, PC_1_Wm1, h_W, d_W)
+        res_alpha[wi] = cae_deno(PC_W, Z_2_W, PC_1_Wm1, h_W, 0.0)
 
     return (permno, res_ts, res_alpha, res_linear)
 
@@ -321,33 +333,33 @@ def alphas_mp(
 if __name__ == "__main__":
     permnos = np.load("data/permnos_liquid.npy")
 
-    args = [
-        #{"freq": "5min", "scaler": 1, "trim_option": "ln1"},
-        #{"freq": "5min", "scaler": 1, "trim_option": "ln2"},
-        {"freq": "5min", "scaler": 0.5, "trim_option": "ln2"},
-        {"freq": "5min", "scaler": 2, "trim_option": "ln2"},
-        #
-        {"freq": "5min", "scaler": 2, "trim_option": "0"},
-        {"freq": "5min", "scaler": 0.5, "trim_option": "ln2"},
-        {"freq": "5min", "scaler": 1, "trim_option": "ln2"},
-        {"freq": "5min", "scaler": 2, "trim_option": "ln2"}
-    ][:2]
+    freq, scaler, trim_option = "5min", 1.0, "dont matter"
 
-    for arg in args:
-        freq = arg["freq"]
-        scaler: float = arg["scaler"]
-        trim_option = arg["trim_option"]
+    result = alphas_mp(
+        permnos, freq, scaler, trim_option,
+        max_workers = 8, chunksize = 10
+    )
 
-        result = alphas_mp(
-            permnos, freq, scaler, trim_option,
-            max_workers = 8, chunksize = 10
-        )
+    scaler_text = str(scaler).replace(".", "")
+    #result.write_parquet(f"data/alphas/alphas_{freq}_sc{scaler_text}_t{trim_option}.parquet")
 
-        scaler_text = str(scaler).replace(".", "")
-        xi_text = str(PARS_ALPHAS.trim_exp).replace(".", "")
-        result.write_parquet(f"data/alphas/alphas_{freq}_sc{scaler_text}_t{trim_option}_xi{xi_text}.parquet")
+    print(f"sc: {scaler}, freq: {freq}")
+    print(f"Scaler in d_t: {1}, Trimming scaling: {trim_option}")
+    #print(f"alphas trimmed: {(result["alpha"].drop_nans() == 0).mean()}")
+    #print(result[["alpha", "linear_alpha"]].drop_nans().describe())
 
-        print(f"sc: {scaler}, freq: {freq}, xi: {PARS_ALPHAS.trim_exp}")
-        print(f"Scaler in d_t: {1}, Trimming scaling: {trim_option}")
-        print(f"alphas trimmed: {(result["alpha"].drop_nans() == 0).mean()}")
-        print(result[["alpha", "linear_alpha"]].drop_nans().describe())
+    denos = result["alpha"].drop_nulls().drop_nans().to_numpy()
+    print(np.quantile(denos, [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.95, 0.99, 1]))
+
+    #for permno in result["permno"].unique().to_numpy():
+    #    denos_permno = result.filter(pl.col("permno") == permno)["alpha"].drop_nulls().drop_nans().to_numpy()
+    #    print(f"Permno: {permno}, quantiles: {np.quantile(denos_permno, [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.95, 0.99, 1])}")
+
+#[1.71048238e-222 4.06463119e-035
+# 7.71548049e-012 2.54485049e-008
+# 5.09253454e-004 2.28929372e-003 1.72633428e-002 5.36486513e-002 1.09620967e-001 2.21282762e-001 2.69828106e-001 3.15613905e-001]
+
+#[1.71048238e-222 5.36188289e-035
+# 3.49717332e-012 2.24181714e-008
+# 5.76256775e-004 2.91731620e-003 2.42253355e-002 7.26840630e-002
+# 1.34579140e-001 2.34352319e-001 2.76167974e-001 3.15613905e-001]
