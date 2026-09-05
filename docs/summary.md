@@ -1,5 +1,5 @@
 ---
-bibliography: ../bibliography/references.bib
+bibliography: ../docs/references.bib
 
 format:
   pdf:

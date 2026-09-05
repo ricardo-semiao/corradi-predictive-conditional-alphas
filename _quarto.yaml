@@ -21,9 +21,10 @@ book:
   - src/pca.ipynb
   - src/betas.ipynb
   - src/alphas.ipynb
+  - src/portfolios.ipynb
   - docs/references.md
 
-bibliography: bibliography/references.bib
+bibliography: docs/references.bib
 
 execute:
   eval: true
