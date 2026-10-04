@@ -3,15 +3,16 @@ project:
   output-dir: docs
 
 book:
-  title: Empirical Analysis for "Predictive conditional alphas" (Distaso el. al 2026)
+  title: |
+    Replication package \
+    Predictive Conditional Alphas
   author:
     - name: |
-        Paper authors: Valentina Corradi, Walter Distaso, \
-        Marcelo Fernandes, and Asger Lunde \ \
-        Research assistant: Ricardo Semião e Castro
+        Valentina Corradi, Walter Distaso, Marcelo Fernandes, and Asger Lunde \
+        Research assistance: Ricardo Semião e Castro
       email: ricardo.semiao@outlook.com
       url: ricardo-semiao.github.io
-  date: today
+  date: 2026-09-05 # today
   date-format: "D MMM YYYY"
   output-file: distaso2026_empirical_analysis
   chapters:
